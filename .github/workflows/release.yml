@@ -1,0 +1,82 @@
+name: Verify and release plugins
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugins-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm plugins:build
+      - run: pnpm plugins:check
+      - name: Verify committed packages match the build
+        run: |
+          git diff --exit-code -- claude/lifexam-eu chatgpt/lifexam-eu
+          test -z "$(git ls-files --others --exclude-standard -- claude/lifexam-eu chatgpt/lifexam-eu)"
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: pnpm plugins:check --tag "$RELEASE_TAG"
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and inspect release archives
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          pnpm plugins:build --tag "$RELEASE_TAG"
+          pnpm plugins:check --tag "$RELEASE_TAG"
+          cd dist/plugins
+          sha256sum *.zip > SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node -e 'const p = require("./plugins/lifexam-eu/plugin.json"); process.stdout.write(p.extensions["com.openai"].publication.release_notes + "\n");' > dist/plugins/RELEASE_NOTES.md
+          gh release create "$RELEASE_TAG" \
+            dist/plugins/*.zip dist/plugins/SHA256SUMS \
+            --verify-tag \
+            --title "Lifexam EU $RELEASE_TAG" \
+            --notes-file dist/plugins/RELEASE_NOTES.md

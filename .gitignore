@@ -1,0 +1,35 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+/secrets/
+/credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies and temporary build output
+node_modules/
+/dist/
+/build/
+/tmp/
+*.zip
+*.log
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+__MACOSX/
+
+# Local agent state
+.claude/
+
+# Build tool state
+*.tsbuildinfo
+.pnpm-store/

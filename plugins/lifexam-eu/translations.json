@@ -1,0 +1,26 @@
+{
+  "en": {
+    "subtitle": "Your Lifexam health record",
+    "description": "Connect your Lifexam EU account for read-only access to eligible Profiles, diagnostic reports, health markers, marker history and health concerns. Separate app-sharing consent is required for all connected apps and can be withdrawn without disconnecting them. Human Profiles need a known valid age of 16 or older; cats and dogs are eligible. Unknown age or species is blocked. Retrieved data is sent to the connected app provider under its own privacy terms. Lifexam does not diagnose conditions or replace professional medical advice."
+  },
+  "it": {
+    "subtitle": "La tua cartella Lifexam",
+    "description": "Collega il tuo account Lifexam EU per accedere in sola lettura a Profili idonei, referti diagnostici, parametri di salute, loro cronologia e problemi di salute. È richiesto un consenso separato alla condivisione per tutte le app collegate, revocabile senza scollegarle. I Profili umani richiedono un’età nota e valida di almeno 16 anni; gatti e cani sono idonei. Età o specie sconosciute sono bloccate. I dati recuperati vengono inviati al fornitore dell’app collegata secondo i suoi termini di privacy. Lifexam non formula diagnosi e non sostituisce il parere di un professionista sanitario."
+  },
+  "fr": {
+    "subtitle": "Votre dossier santé Lifexam",
+    "description": "Connectez votre compte Lifexam EU pour un accès en lecture seule aux Profils admissibles, comptes rendus diagnostiques, indicateurs de santé, leur historique et problèmes de santé. Un consentement distinct au partage est requis pour toutes les applications connectées et peut être retiré sans les déconnecter. Les Profils humains doivent avoir un âge connu et valide d’au moins 16 ans ; chats et chiens sont admissibles. Âge ou espèce inconnus sont bloqués. Les données récupérées sont envoyées au fournisseur de l’application connectée selon ses conditions de confidentialité. Lifexam ne pose pas de diagnostic et ne remplace pas les conseils d’un professionnel de santé."
+  },
+  "es": {
+    "subtitle": "Tu historial de salud Lifexam",
+    "description": "Conecta tu cuenta Lifexam EU para acceder en solo lectura a Perfiles aptos, informes diagnósticos, indicadores de salud, su historial y problemas de salud. Se requiere un consentimiento separado al intercambio para todas las aplicaciones conectadas, que puede retirarse sin desconectarlas. Los Perfiles humanos necesitan una edad conocida y válida de al menos 16 años; gatos y perros son aptos. Se bloquean la edad o especie desconocidas. Los datos recuperados se envían al proveedor de la aplicación conectada según sus condiciones de privacidad. Lifexam no diagnostica enfermedades ni sustituye el consejo profesional sanitario."
+  },
+  "pt": {
+    "subtitle": "O seu registo de saúde Lifexam",
+    "description": "Ligue a sua conta Lifexam EU para acesso só de leitura a Perfis elegíveis, relatórios de diagnóstico, indicadores de saúde, seu histórico e problemas de saúde. É necessário consentimento separado à partilha para todas as aplicações ligadas, que pode ser retirado sem as desligar. Perfis humanos precisam de idade conhecida e válida de pelo menos 16 anos; gatos e cães são elegíveis. Idade ou espécie desconhecida é bloqueada. Os dados recuperados são enviados ao fornecedor da aplicação ligada segundo os seus termos de privacidade. O Lifexam não diagnostica doenças nem substitui aconselhamento profissional de saúde."
+  },
+  "de": {
+    "subtitle": "Deine Lifexam-Gesundheitsakte",
+    "description": "Verbinden Sie Ihr Lifexam-EU-Konto für Lesezugriff auf zulässige Profile, diagnostische Befunde, Gesundheitswerte, deren Verlauf und Gesundheitsprobleme. Eine separate Einwilligung zur App-Freigabe ist für alle verbundenen Apps erforderlich und lässt sich widerrufen, ohne sie zu trennen. Menschliche Profile benötigen ein bekanntes gültiges Alter ab 16 Jahren; Katzen und Hunde sind zulässig. Unbekanntes Alter oder unbekannte Art werden blockiert. Abgerufene Daten gehen nach den Datenschutzbedingungen an den Anbieter der verbundenen App. Lifexam stellt keine Diagnosen und ersetzt keine professionelle medizinische Beratung."
+  }
+}

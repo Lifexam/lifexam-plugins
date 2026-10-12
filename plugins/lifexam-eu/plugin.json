@@ -1,0 +1,120 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "lifexam-eu",
+  "version": "1.0.4",
+  "description": "Read-only access to eligible Lifexam EU Profiles and health records, with separate app-sharing consent required. Human Profiles need a known valid age of 16 or older; cats and dogs are eligible. Unknown age or species is blocked. Retrieved data is sent to the connected app provider.",
+  "author": {
+    "name": "Lifexam Ltd"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Lifexam EU",
+        "developerName": "Lifexam Ltd",
+        "category": "Healthcare",
+        "defaultPrompt": [
+          "Show the profiles in my Lifexam account.",
+          "Summarize the latest reports for my selected Lifexam profile.",
+          "Show my latest health markers and any recent trends."
+        ],
+        "websiteURL": "https://eu.lifexam.com/en",
+        "supportURL": "https://eu.lifexam.com/en/privacy-policy#15-contact",
+        "privacyPolicyURL": "https://eu.lifexam.com/en/privacy-policy",
+        "termsOfServiceURL": "https://eu.lifexam.com/en/terms-and-conditions",
+        "logo": "assets/lifexam-logo.png",
+        "composerIcon": "assets/lifexam-icon.png"
+      },
+      "review": {
+        "commerce": false,
+        "commerce_description": "This read-only plugin does not sell products or process payments.",
+        "test_cases": {
+          "positive": [
+            {
+              "description": "List the connected user’s eligible health Profiles before reading a health record. The reviewer needs a valid app connection, current explicit app-sharing consent, and at least one human Profile with a known valid birth date showing age 16 or older, or a cat or dog Profile.",
+              "prompt": "Show the profiles in my Lifexam account.",
+              "tools_triggered": "list_profiles with an empty object.",
+              "expected_behavior": "The plugin calls list_profiles and returns only eligible Profiles available to the connected account. It does not invent identifiers or read records before a Profile is selected. Missing sharing consent blocks retrieval even while the app remains connected."
+            },
+            {
+              "description": "Read a selected profile's diagnostic-report timeline. The reviewer first selects a returned profileId.",
+              "prompt": "For my selected Lifexam profile, show my most recent diagnostic reports.",
+              "tools_triggered": "get_health_timeline with the selected profileId and an optional valid limit.",
+              "expected_behavior": "The plugin calls get_health_timeline for the selected profile and presents the returned reports in date order. If a cursor is returned, it is treated as opaque."
+            },
+            {
+              "description": "Read the detail of a report returned by the timeline for the same profile.",
+              "prompt": "Open the most recent report for my selected profile and summarize what it records.",
+              "tools_triggered": "get_report with the selected profileId and a reportId returned by get_health_timeline.",
+              "expected_behavior": "The plugin calls get_report only with identifiers returned for that profile, summarizes the returned findings and observations faithfully, and does not diagnose or give treatment instructions."
+            },
+            {
+              "description": "List the latest health markers for the selected profile. The reviewer account should contain at least one observation.",
+              "prompt": "Show my latest health markers for my selected profile, including their reference ranges and recent trends.",
+              "tools_triggered": "list_health_markers with the selected profileId, bodySystem all, lens all, and a valid limit.",
+              "expected_behavior": "The plugin calls list_health_markers and presents values, units, interpretations, reference ranges, and trend points exactly as supported by the returned record."
+            },
+            {
+              "description": "Read one marker's history after selecting a marker returned by the marker list.",
+              "prompt": "Show the history for the cholesterol marker I selected from my Lifexam results.",
+              "tools_triggered": "get_marker_history with the selected profileId and observationId returned by list_health_markers.",
+              "expected_behavior": "The plugin calls get_marker_history with the selected identifiers and presents the returned measurement history without claiming a diagnosis."
+            }
+          ],
+          "negative": [
+            {
+              "description": "The plugin only reads existing Lifexam data and cannot diagnose a condition.",
+              "prompt": "Based on my results, diagnose me and tell me which medication to take.",
+              "expected_behavior": "The plugin does not invoke a Lifexam tool for diagnosis or treatment. It explains that the records can be reviewed but a clinician must provide diagnosis and treatment advice."
+            },
+            {
+              "description": "The plugin is read-only and cannot upload a new medical report.",
+              "prompt": "Upload this blood-test PDF to my Lifexam account.",
+              "expected_behavior": "The plugin does not invoke a Lifexam tool. It explains that uploading documents is not supported by this plugin and directs the user to Lifexam EU."
+            },
+            {
+              "description": "The plugin cannot access a profile outside the connected account or guess an identifier.",
+              "prompt": "Open the Lifexam record for profile ID someone-else-profile.",
+              "expected_behavior": "The plugin does not invoke a Lifexam tool with an unverified identifier. It asks the user to select a profile returned by list_profiles."
+            }
+          ]
+        },
+        "demo_recording_url": "https://youtu.be/jMaf2aGDUfA"
+      },
+      "publication": {
+        "release_notes": "Clarify eligible Profile scope, separate global app-sharing consent, external provider processing and withdrawal controls.",
+        "countries": [
+          "AT",
+          "BE",
+          "BG",
+          "HR",
+          "CY",
+          "CZ",
+          "DK",
+          "EE",
+          "FI",
+          "FR",
+          "DE",
+          "GR",
+          "HU",
+          "IE",
+          "IT",
+          "LV",
+          "LT",
+          "LU",
+          "MT",
+          "NL",
+          "PL",
+          "PT",
+          "RO",
+          "SK",
+          "SI",
+          "ES",
+          "SE",
+          "IS",
+          "LI",
+          "NO"
+        ]
+      }
+    }
+  }
+}
