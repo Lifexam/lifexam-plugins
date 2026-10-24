@@ -17,6 +17,13 @@ function createFixture() {
   fs.cpSync(path.join(repoRoot, sourceDir), path.join(root, sourceDir), {
     recursive: true,
   });
+  for (const target of ["claude", "grok"]) {
+    fs.cpSync(
+      path.join(repoRoot, target, "lifexam-eu"),
+      path.join(root, target, "lifexam-eu"),
+      { recursive: true },
+    );
+  }
   return root;
 }
 
@@ -53,13 +60,23 @@ function updateManifest(
 
 function archive(
   root: string,
-  target: "chatgpt" | "claude",
+  target: "chatgpt" | "claude" | "grok",
   version = sourceManifest(root).version,
 ) {
+  if (target !== "chatgpt") return path.join(root, target, "lifexam-eu");
   return path.join(root, "dist/plugins", `lifexam-eu-${target}-${version}.zip`);
 }
 
-function entries(zip: string) {
+function entries(zip: string): string[] {
+  if (fs.statSync(zip).isDirectory()) {
+    return fs
+      .readdirSync(zip, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) =>
+        path.relative(zip, path.join(entry.parentPath, entry.name)),
+      )
+      .sort();
+  }
   return execFileSync("unzip", ["-Z1", zip], { encoding: "utf8" })
     .trim()
     .split("\n")
@@ -67,6 +84,8 @@ function entries(zip: string) {
 }
 
 function readEntry(zip: string, name: string) {
+  if (fs.statSync(zip).isDirectory())
+    return fs.readFileSync(path.join(zip, name));
   return execFileSync("unzip", ["-p", zip, name], {
     maxBuffer: 5 * 1024 * 1024,
   });
@@ -83,11 +102,19 @@ function expectFailure(root: string, args: string[], message: string) {
 }
 
 describe("plugin builds", () => {
-  it("generates both platform layouts with identical shared skill and icons", () => {
+  it("builds ChatGPT and validates repository packages with identical shared skill and icons", () => {
     const root = createFixture();
     runBuild(root);
+    expect(fs.readdirSync(path.join(root, "dist/plugins"))).toEqual([
+      `lifexam-eu-chatgpt-${sourceManifest(root).version}.zip`,
+    ]);
     const chatgpt = archive(root, "chatgpt");
     const claude = archive(root, "claude");
+    const grok = archive(root, "grok");
+    expect(entries(grok)).toEqual(entries(claude));
+    for (const name of entries(claude)) {
+      expect(readEntry(grok, name)).toEqual(readEntry(claude, name));
+    }
     const common = [
       "skills/lifexam-health-record/SKILL.md",
       "assets/lifexam-icon.png",
@@ -112,7 +139,7 @@ describe("plugin builds", () => {
       version: manifest.version,
       description: manifest.description,
       author: manifest.author,
-      displayName: manifest.extensions["com.openai"].interface.displayName,
+      displayName: "Lifexam",
       homepage: manifest.extensions["com.openai"].interface.websiteURL,
       icon: "./assets/lifexam-logo.png",
       documentationUrl: manifest.extensions["com.openai"].interface.websiteURL,
@@ -148,12 +175,141 @@ describe("plugin builds", () => {
     expect(runBuild(root, ["--check"])).toContain("up to date");
   });
 
+  it("includes additional servers in Claude and Grok while keeping ChatGPT single-server", () => {
+    const root = createFixture();
+    const file = path.join(root, sourceDir, "mcp.json");
+    const mcp = JSON.parse(fs.readFileSync(file, "utf8"));
+    mcp.mcpServers["additional-records"] = {
+      type: "streamable-http",
+      url: "https://example.com/mcp",
+    };
+    fs.writeFileSync(file, JSON.stringify(mcp));
+    for (const target of ["claude", "grok"]) {
+      const config = {
+        mcpServers: Object.fromEntries(
+          Object.entries(mcp.mcpServers).map(([name, server]) => [
+            name,
+            { type: "http", url: (server as { url: string }).url },
+          ]),
+        ),
+      };
+      fs.writeFileSync(
+        path.join(root, target, "lifexam-eu/.mcp.json"),
+        JSON.stringify(config, null, 2) + "\n",
+      );
+    }
+    runBuild(root);
+    for (const target of ["claude", "grok"] as const) {
+      expect(
+        JSON.parse(readEntry(archive(root, target), ".mcp.json").toString()),
+      ).toEqual({
+        mcpServers: {
+          "lifexam-eu": { type: "http", url: "https://eu.lifexam.com/api/mcp" },
+          "additional-records": {
+            type: "http",
+            url: "https://example.com/mcp",
+          },
+        },
+      });
+    }
+    const chatgpt = JSON.parse(
+      readEntry(archive(root, "chatgpt"), "mcp.json").toString(),
+    );
+    expect(Object.keys(chatgpt.mcpServers)).toEqual(["lifexam-eu"]);
+    expect(runBuild(root, ["--check"])).toContain("up to date");
+    fs.appendFileSync(
+      path.join(root, "grok/lifexam-eu/README.md"),
+      "\nStale\n",
+    );
+    expectFailure(root, ["--check"], "grok package is stale");
+  });
+
+  it.each([
+    [
+      "invalid name",
+      { type: "streamable-http", url: "https://example.com/mcp" },
+      "server names",
+    ],
+    [
+      "extra",
+      { type: "http", url: "https://example.com/mcp" },
+      "streamable-http",
+    ],
+    [
+      "extra",
+      { type: "streamable-http", url: "http://example.com/mcp" },
+      "HTTPS",
+    ],
+    [
+      "extra",
+      { type: "streamable-http", url: "https://user:secret@example.com/mcp" },
+      "credentials",
+    ],
+    [
+      "extra",
+      { type: "streamable-http", url: "https://example.com/mcp?token=secret" },
+      "query parameters",
+    ],
+    [
+      "extra",
+      { type: "streamable-http", url: "https://example.com/mcp#secret" },
+      "fragments",
+    ],
+    [
+      "extra",
+      { type: "streamable-http", url: "https://example.com/mcp", headers: {} },
+      "only type and url",
+    ],
+    ["extra", null, "must be an object"],
+  ])("rejects invalid additional server %s: %j", (name, server, message) => {
+    const root = createFixture();
+    const file = path.join(root, sourceDir, "mcp.json");
+    const mcp = JSON.parse(fs.readFileSync(file, "utf8"));
+    mcp.mcpServers[name as string] = server;
+    fs.writeFileSync(file, JSON.stringify(mcp));
+    expectFailure(root, [], message as string);
+    expect(fs.existsSync(path.join(root, "dist"))).toBe(false);
+  });
+
+  it.each(["missing", "changed"])(
+    "preserves the required Lifexam endpoint: %s",
+    (mode) => {
+      const root = createFixture();
+      const file = path.join(root, sourceDir, "mcp.json");
+      const mcp = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (mode === "missing") delete mcp.mcpServers["lifexam-eu"];
+      else mcp.mcpServers["lifexam-eu"].url = "https://example.com/mcp";
+      fs.writeFileSync(file, JSON.stringify(mcp));
+      expectFailure(
+        root,
+        [],
+        mode === "missing" ? "must include" : "url must stay",
+      );
+    },
+  );
+
+  it.each(["claude", "grok"])(
+    "does not create or overwrite the %s repository package",
+    (target) => {
+      const root = createFixture();
+      const folder = path.join(root, target, "lifexam-eu");
+      const before = fs.statSync(path.join(folder, "README.md")).mtimeMs;
+      runBuild(root);
+      expect(fs.statSync(path.join(folder, "README.md")).mtimeMs).toBe(before);
+      fs.rmSync(folder, { recursive: true });
+      expectFailure(root, [], "ENOENT");
+      expect(fs.existsSync(folder)).toBe(false);
+    },
+  );
+
   it("checks tracked platform folders against the shared source", () => {
     const root = createFixture();
     runBuild(root);
     const readme = path.join(root, "claude/lifexam-eu/README.md");
     fs.appendFileSync(readme, "\nUnexpected manual change.\n");
-    expectFailure(root, ["--check"], "claude generated package is stale");
+    expectFailure(root, ["--check"], "claude package is stale");
+    expectFailure(root, [], "claude package is stale");
+    fs.copyFileSync(path.join(root, sourceDir, "README.md"), readme);
     runBuild(root);
     expect(runBuild(root, ["--check"])).toContain("up to date");
     fs.writeFileSync(
@@ -163,7 +319,7 @@ describe("plugin builds", () => {
     expectFailure(root, ["--check"], "unexpected file inventory");
   });
 
-  it("refuses to overwrite symbolic links in generated folders", () => {
+  it("rejects symbolic links in maintained repository packages", () => {
     const root = createFixture();
     runBuild(root);
     const outside = path.join(root, "outside.md");
@@ -299,12 +455,22 @@ describe("plugin builds", () => {
     expect(runBuild(root, ["--check"])).toContain("up to date");
   });
 
-  it("updates one version and release notes for both outputs, preserving review metadata", () => {
+  it("updates one version and release notes for all outputs, preserving review metadata", () => {
     const root = createFixture();
     updateManifest(root, (manifest) => {
       manifest.extensions["com.openai"].review.demo_recording_url =
         "https://example.com/demo";
     });
+    for (const target of ["claude", "grok"]) {
+      const file = path.join(
+        root,
+        target,
+        "lifexam-eu/.claude-plugin/plugin.json",
+      );
+      const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+      manifest.version = "1.0.2";
+      fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + "\n");
+    }
     runBuild(root, [
       "--version",
       "1.0.2",
@@ -335,6 +501,14 @@ describe("plugin builds", () => {
         ).toString(),
       ).version,
     ).toBe("1.0.2");
+    expect(
+      JSON.parse(
+        readEntry(
+          archive(root, "grok"),
+          ".claude-plugin/plugin.json",
+        ).toString(),
+      ).version,
+    ).toBe("1.0.2");
     expect(runBuild(root, ["--check"])).toContain("up to date");
   });
 
@@ -342,7 +516,7 @@ describe("plugin builds", () => {
     const root = createFixture();
     const args = ["--out-dir", "dist/custom"];
     runBuild(root, args);
-    const outputs = ["chatgpt", "claude"].map((target) =>
+    const outputs = ["chatgpt"].map((target) =>
       path.join(
         root,
         "dist/custom",
@@ -357,7 +531,7 @@ describe("plugin builds", () => {
     expect(runBuild(root, [...args, "--check"])).toContain("up to date");
   });
 
-  it.each(["chatgpt", "claude"] as const)(
+  it.each(["chatgpt"] as const)(
     "rejects extra files in the %s ZIP",
     (target) => {
       const root = createFixture();
@@ -408,6 +582,12 @@ describe("plugin builds", () => {
       path.join(root, sourceDir, "assets/lifexam-logo.png"),
       png,
     );
+    for (const target of ["claude", "grok"]) {
+      fs.writeFileSync(
+        path.join(root, target, "lifexam-eu/assets/lifexam-logo.png"),
+        png,
+      );
+    }
     runBuild(root);
     expect(runBuild(root, ["--check"])).toContain("up to date");
     expect(

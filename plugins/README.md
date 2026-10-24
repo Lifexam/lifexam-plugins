@@ -1,11 +1,11 @@
 # Lifexam assistant plugins
 
-Both publication packages use the same source: `lifexam-eu/` for the manifest
+All three packages use the same source: `lifexam-eu/` for the manifest
 template, MCP configuration, health-record skill, package README and MIT license,
 and `translations.json` for listing copy. Do not edit generated ZIPs. Icons are maintained
 in `lifexam-eu/assets/`.
 The existing plugin identity (`lifexam-eu`), version, author, endpoint, and
-read-only behavior are shared by both targets.
+read-only behavior are shared by all targets.
 
 ## Build and verify
 
@@ -17,20 +17,22 @@ pnpm plugins:build
 pnpm plugins:check
 ```
 
-The build generates and inspects:
+The build generates and inspects `dist/plugins/lifexam-eu-chatgpt-<version>.zip`
+and the generated ChatGPT folder. Claude and Grok Build are maintained as
+complete repository packages under `claude/lifexam-eu/` and `grok/lifexam-eu/`.
+The build validates those packages but never creates or overwrites them.
+No Claude or Grok ZIP is produced.
 
-- `dist/plugins/lifexam-eu-chatgpt-<version>.zip`
-- `dist/plugins/lifexam-eu-claude-<version>.zip`
-
-`--check` checks both archives' exact file lists and bytes against the current
-source. It rejects missing, stale, extra, or duplicate entries. Builds use fixed
+`--check` checks the ChatGPT archive and all three folders against the current
+shared source. It rejects missing, stale, extra, or duplicate entries. Builds use fixed
 timestamps and file order, so identical inputs produce identical ZIPs with the
-same ZIP tools. Output files are replaced only after both packages have built
-and passed inspection.
+same ZIP tools. The ChatGPT output is replaced only after the repository packages pass
+validation and its archive passes inspection.
 
 To prepare another release:
 
 ```sh
+# First update the maintained Claude and Grok manifest versions to 1.0.4.
 pnpm plugins:build --version 1.0.4 --release-notes "Describe the change"
 pnpm plugins:build --out-dir dist/custom-plugins
 pnpm plugins:check --out-dir dist/custom-plugins
@@ -40,9 +42,9 @@ Version and release-note options update the shared manifest after a successful
 build. They cannot be combined with `--check`. The old `chatgpt:plugin:build`
 command and `chatgpt-plugin/` source have been replaced by this workflow.
 
-## Generated formats
+## Package formats
 
-| Component         | ChatGPT                                              | Claude                             |
+| Component         | ChatGPT                                              | Claude and Grok Build              |
 | ----------------- | ---------------------------------------------------- | ---------------------------------- |
 | Manifest          | Root `plugin.json` (portable Agent Plugins format)   | `.claude-plugin/plugin.json`       |
 | MCP configuration | Root `mcp.json`, transport `streamable-http`         | Root `.mcp.json`, transport `http` |
@@ -52,12 +54,48 @@ command and `chatgpt-plugin/` source have been replaced by this workflow.
 
 The ChatGPT manifest preserves `extensions.com.openai`, including listing,
 review cases, release notes, and any supplied video URL or country settings.
-The Claude manifest derives its identity, description, author, display name,
-icon, and policy/support links from that same manifest. OpenAI-specific review
+The maintained Claude and Grok manifests use the display name `Lifexam` and
+retain the `lifexam-eu` identity. Their version, description, author, icon, and
+policy/support links must match the shared source; the builder checks them. OpenAI-specific review
 and publication fields stay out of the Claude manifest. Claude release notes
 are entered separately in its publication flow. The shared short description
 is limited to 500 characters for Claude uploads; ChatGPT's longer listing text
 remains available under `extensions.com.openai.interface.longDescription`.
+
+The Grok Build package uses the same layout and bytes as the Claude package,
+including `.claude-plugin/plugin.json` and `.mcp.json`. It is maintained separately
+under `grok/lifexam-eu/` for repository-based distribution.
+[Grok Build documents Claude Code plugin compatibility](https://docs.x.ai/build/features/skills-plugins-marketplaces#claude-code-compatibility).
+This does not establish Grok Bot package installation support.
+
+## Multiple MCP servers
+
+`plugins/lifexam-eu/mcp.json` is the shared server map. Keep the required
+`lifexam-eu` entry at `https://eu.lifexam.com/api/mcp`. To add another server,
+add an entry under `mcpServers` with a unique lowercase kebab-case name,
+`type: "streamable-http"`, and its verified HTTPS `url`. Add matching entries
+to the maintained Claude and Grok `.mcp.json` files using `type: "http"`.
+Run the build and checks.
+No additional endpoint is configured by this change.
+
+Claude and Grok Build must include every declared server, using transport
+`http`; the build validates their configuration against the shared server map. ChatGPT receives only `lifexam-eu`; additional servers are deliberately
+excluded because the
+[OpenAI submission portal connects one server per plugin](https://developers.openai.com/plugins/deploy/submission#connect-and-scan-your-mcp-server).
+
+Server declarations accept only `type` and `url`. URLs cannot contain embedded
+credentials, query parameters, or fragments. Do not add tokens, headers, local
+commands, or secrets. Authentication is completed in each host. Adding a server
+does not establish its read-only scope: verify its tools and access controls,
+and update the shared skill and all six listing translations if its capabilities
+change the described behavior.
+
+For Grok Build, run `grok --plugin-dir ./grok/lifexam-eu` from the repository
+root. Use `/mcps` to inspect and authenticate the servers. Before claiming live
+support, test sign-in, tool discovery, profile selection, record reads, withdrawn
+consent, and language handling with a dedicated sample account. Grok Build has
+no country targeting field established here; the OpenAI country allowlist is
+not enforced by the Grok package.
 
 ## Languages
 
@@ -69,7 +107,7 @@ it to `extensions.com.openai.publication.translations` in the ChatGPT ZIP.
 English also supplies its base listing fields. Release options update only the
 manifest template, so translated copy is never duplicated into it.
 
-The shared skill instructs both ChatGPT and Claude to follow the user's language
+The shared skill instructs ChatGPT, Claude, and Grok Build to follow the user's language
 in English, Italian, French, Spanish, Portuguese, or German, preserving record
 values, units, codes, dates, and medical meaning. Source quotations remain in
 their original language. Model responses still need live verification.
@@ -94,11 +132,11 @@ rejects a missing, empty, malformed, or duplicate country list; an empty list
 would remove OpenAI's country restrictions.
 
 Claude has no documented country-availability field in its plugin manifest.
-Its ZIP does not enforce these restrictions. Confirm an equivalent directory
+Its repository package does not enforce these restrictions. Confirm an equivalent directory
 restriction with Anthropic before publishing the Claude plugin; the shared
 source records the intended audience, but cannot guarantee Claude distribution.
 
-Country availability is separate from data residency. Both plugins connect to
+Country availability is separate from data residency. All three plugins connect to
 `eu.lifexam.com`; restricting publication countries does not configure where
 ChatGPT or Claude processes the information returned by Lifexam.
 
@@ -106,10 +144,10 @@ ChatGPT or Claude processes the information returned by Lifexam.
 
 The public release repository is
 [Lifexam/lifexam-plugins](https://github.com/Lifexam/lifexam-plugins). It stores
-the generated package contents in `chatgpt/lifexam-eu/` and
-`claude/lifexam-eu/`. The shared source and builder live in this repository. Building updates both
-platform folders as well as the ZIPs. Commit the generated folders together with
-the source change so the directory sees the same version as the release archives.
+the package folders `chatgpt/lifexam-eu/`, `claude/lifexam-eu/`, and
+`grok/lifexam-eu/`. The shared source and builder live in this repository. Building updates the ChatGPT
+folder and ZIP while validating the maintained Claude and Grok packages. Commit
+all package folders with shared-source changes.
 
 For Claude directory submission, use the release repository URL and plugin path
 `claude/lifexam-eu`. The package includes its own README and license, as required
@@ -117,12 +155,12 @@ by the [directory checklist](https://claude.com/docs/plugins/pre-submission-chec
 Commit and push release files only when authorized.
 
 Upload the ChatGPT ZIP to the existing plugin in the
-[OpenAI Plugins dashboard](https://platform.openai.com/plugins). The Claude
-ZIP is valid for personal or organization plugin uploads. Claude's public
+[OpenAI Plugins dashboard](https://platform.openai.com/plugins). Claude's public
 directory currently asks for a plugin bundle hosted on GitHub and its repository
 URL through the [directory submission portal](https://claude.com/resources/articles/build-plugins-for-claude).
-Each platform has its own review and publication process; building a ZIP does
-not upload or publish it.
+Each platform has its own review and publication process; building does not
+upload or publish anything. Grok Bot package installation and Grok directory
+submission are not established by the Grok Build compatibility documentation.
 
 For ChatGPT MCP review, add a real, reviewer-accessible walkthrough URL to
 `plugin.json` at `extensions.com.openai.review.demo_recording_url`. Rebuild so
@@ -135,9 +173,8 @@ availability, policy coverage, and any remaining portal requirements before
 submitting. The builder validates package structure and local content, not
 live sign-in, video accessibility, or directory approval.
 
-To validate the generated Claude package locally, extract it into an empty
-directory and run `claude plugin validate --strict <directory>` when Claude Code
-is available. This checks the manifest; verify OAuth and actual reads in each
+To validate the maintained Claude package locally, run
+`claude plugin validate --strict ./claude/lifexam-eu` when Claude Code is available. This checks the manifest; verify OAuth and actual reads in each
 host separately.
 
 Format references:
@@ -146,3 +183,11 @@ Format references:
 - [OpenAI submission requirements](https://developers.openai.com/plugins/deploy/submission)
 - [Claude manifest reference](https://code.claude.com/docs/en/plugins-reference)
 - [Claude upload requirements](https://platform.claude.com/docs/en/manage-claude/plugins-api#upload-requirements)
+
+## Maintaining repository packages
+
+Claude and Grok are published from their committed repository folders. Keep their
+README, license, skill, and icons identical to the shared source. Update their
+`.claude-plugin/plugin.json` manifests for shared metadata/version changes and
+their `.mcp.json` files for server changes. The builder reports stale or missing
+files and leaves those folders unchanged. The ChatGPT folder remains generated.

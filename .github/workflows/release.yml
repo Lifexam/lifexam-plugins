@@ -35,8 +35,8 @@ jobs:
       - run: pnpm plugins:check
       - name: Verify committed packages match the build
         run: |
-          git diff --exit-code -- claude/lifexam-eu chatgpt/lifexam-eu
-          test -z "$(git ls-files --others --exclude-standard -- claude/lifexam-eu chatgpt/lifexam-eu)"
+          git diff --exit-code -- claude/lifexam-eu chatgpt/lifexam-eu grok/lifexam-eu
+          test -z "$(git ls-files --others --exclude-standard -- claude/lifexam-eu chatgpt/lifexam-eu grok/lifexam-eu)"
       - name: Verify release tag
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -60,14 +60,14 @@ jobs:
           node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Build and inspect release archives
+      - name: Build and inspect release package
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           pnpm plugins:build --tag "$RELEASE_TAG"
           pnpm plugins:check --tag "$RELEASE_TAG"
           cd dist/plugins
-          sha256sum *.zip > SHA256SUMS
+          sha256sum lifexam-eu-chatgpt-*.zip > SHA256SUMS
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -76,7 +76,7 @@ jobs:
         run: |
           node -e 'const p = require("./plugins/lifexam-eu/plugin.json"); process.stdout.write(p.extensions["com.openai"].publication.release_notes + "\n");' > dist/plugins/RELEASE_NOTES.md
           gh release create "$RELEASE_TAG" \
-            dist/plugins/*.zip dist/plugins/SHA256SUMS \
+            dist/plugins/lifexam-eu-chatgpt-*.zip dist/plugins/SHA256SUMS \
             --verify-tag \
             --title "Lifexam EU $RELEASE_TAG" \
             --notes-file dist/plugins/RELEASE_NOTES.md

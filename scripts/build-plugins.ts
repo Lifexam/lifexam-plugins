@@ -1,4 +1,4 @@
-/** Build ChatGPT and Claude publication ZIPs from plugins/lifexam-eu/. */
+/** Build the ChatGPT package and validate maintained Claude/Grok packages. */
 import { execFileSync } from "node:child_process";
 import {
   mkdir,
@@ -72,7 +72,7 @@ type PluginManifest = {
 };
 
 type PluginPackage = {
-  target: "chatgpt" | "claude";
+  target: "chatgpt" | "claude" | "grok";
   files: Map<string, Buffer>;
 };
 
@@ -296,25 +296,57 @@ function validatePluginManifest(
   }
 }
 
-function validateMcpManifest(manifest: unknown) {
+type McpManifest = {
+  $schema: string;
+  mcpServers: Record<string, { type: "streamable-http"; url: string }>;
+};
+
+function validateMcpManifest(
+  manifest: unknown,
+): asserts manifest is McpManifest {
   if (!isRecord(manifest)) fail("mcp.json must be a JSON object");
+  if (
+    manifest.$schema !==
+    "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+  ) {
+    fail("mcp.json must declare the Agent Plugins MCP schema");
+  }
+  if (
+    Object.keys(manifest).some(
+      (key) => !["$schema", "mcpServers"].includes(key),
+    )
+  ) {
+    fail("mcp.json supports only $schema and mcpServers");
+  }
   const servers = manifest.mcpServers;
   if (!isRecord(servers)) fail("mcp.json mcpServers is required");
-  const names = Object.keys(servers);
-  if (names.length !== 1 || names[0] !== "lifexam-eu") {
-    fail('mcp.json must declare exactly one server named "lifexam-eu"');
+  if (!Object.hasOwn(servers, "lifexam-eu")) {
+    fail('mcp.json must include the "lifexam-eu" server');
   }
-  const server = servers["lifexam-eu"];
-  if (!isRecord(server)) fail("mcp.json lifexam-eu server must be an object");
-  if (Object.keys(server).some((key) => !["type", "url"].includes(key))) {
-    fail(
-      "mcp.json server supports only type and url; do not embed credentials or unsupported options",
-    );
+  for (const [name, server] of Object.entries(servers)) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
+      fail(
+        "mcp.json server names must use lowercase kebab-case, at most 64 characters",
+      );
+    }
+    if (!isRecord(server)) fail(`mcp.json ${name} server must be an object`);
+    if (Object.keys(server).some((key) => !["type", "url"].includes(key))) {
+      fail(
+        "mcp.json server supports only type and url; do not embed credentials or unsupported options",
+      );
+    }
+    if (server.type !== "streamable-http") {
+      fail(`mcp.json ${name} type must stay "streamable-http"`);
+    }
+    assertHttpsUrl(server.url, `mcp.json ${name} url`);
+    const url = new URL(server.url);
+    if (url.search || url.hash) {
+      fail(
+        `mcp.json ${name} url must not contain query parameters or fragments; do not embed credentials`,
+      );
+    }
   }
-  if (server.type !== "streamable-http") {
-    fail('mcp.json lifexam-eu type must stay "streamable-http"');
-  }
-  if (server.url !== EXPECTED_MCP_URL) {
+  if ((servers["lifexam-eu"] as { url: string }).url !== EXPECTED_MCP_URL) {
     fail(`mcp.json lifexam-eu url must stay ${EXPECTED_MCP_URL}`);
   }
 }
@@ -409,7 +441,7 @@ function parseArgs(argv: string[]) {
 function printHelp() {
   console.log(
     [
-      "Build both plugin ZIPs from plugins/lifexam-eu/.",
+      "Build the ChatGPT ZIP/folder and validate Claude/Grok repository packages from plugins/lifexam-eu/.",
       "",
       "  pnpm plugins:build",
       '  pnpm plugins:build --version 1.0.2 --release-notes "What changed"',
@@ -417,7 +449,7 @@ function printHelp() {
       "  pnpm plugins:check",
       "  pnpm plugins:check --tag v1.0.4",
       "",
-      "Outputs: lifexam-eu-chatgpt-<version>.zip and lifexam-eu-claude-<version>.zip.",
+      "ZIP output: lifexam-eu-chatgpt-<version>.zip; Claude and Grok use repository folders.",
       "See plugins/README.md for upload instructions and publication requirements.",
     ].join("\n"),
   );
@@ -429,7 +461,7 @@ function jsonBytes(value: unknown): Buffer {
 
 async function createPackages(
   manifest: PluginManifest,
-  mcp: unknown,
+  mcp: McpManifest,
   skill: string,
 ): Promise<PluginPackage[]> {
   const common = new Map<string, Buffer>([
@@ -443,7 +475,7 @@ async function createPackages(
   const iface = manifest.extensions["com.openai"].interface;
   const claudeManifest = {
     name: manifest.name,
-    displayName: iface.displayName,
+    displayName: "Lifexam",
     version: manifest.version,
     description: manifest.description,
     author: manifest.author,
@@ -454,34 +486,38 @@ async function createPackages(
     privacyPolicyUrl: iface.privacyPolicyURL,
     termsOfServiceUrl: iface.termsOfServiceURL,
   };
-  // Claude calls Streamable HTTP "http" and discovers .mcp.json at the root.
-  // The validated source has one remote server and no embedded credentials.
-  const server = (mcp as { mcpServers: Record<string, { url: string }> })
-    .mcpServers[manifest.name];
+  // Claude and Grok Build share the Claude-compatible plugin layout.
+  const compatibleFiles = new Map([
+    ...common,
+    [".claude-plugin/plugin.json", jsonBytes(claudeManifest)],
+    [
+      ".mcp.json",
+      jsonBytes({
+        mcpServers: Object.fromEntries(
+          Object.entries(mcp.mcpServers).map(([name, server]) => [
+            name,
+            { type: "http", url: server.url },
+          ]),
+        ),
+      }),
+    ],
+  ]);
+  // The OpenAI submission portal connects only one server per plugin.
+  const chatgptMcp = {
+    $schema: mcp.$schema,
+    mcpServers: { [manifest.name]: mcp.mcpServers[manifest.name] },
+  };
   return [
     {
       target: "chatgpt",
       files: new Map([
         ...common,
         ["plugin.json", jsonBytes(manifest)],
-        ["mcp.json", jsonBytes(mcp)],
+        ["mcp.json", jsonBytes(chatgptMcp)],
       ]),
     },
-    {
-      target: "claude",
-      files: new Map([
-        ...common,
-        [".claude-plugin/plugin.json", jsonBytes(claudeManifest)],
-        [
-          ".mcp.json",
-          jsonBytes({
-            mcpServers: {
-              [manifest.name]: { type: "http", url: server.url },
-            },
-          }),
-        ],
-      ]),
-    },
+    { target: "claude", files: new Map(compatibleFiles) },
+    { target: "grok", files: new Map(compatibleFiles) },
   ];
 }
 
@@ -514,7 +550,7 @@ function checkArchive(zipPath: string, files: Map<string, Buffer>) {
   console.log(`Plugin ZIP is up to date: ${path.relative(ROOT, zipPath)}`);
 }
 
-/** Generated folders are committed so Claude can read a complete package. */
+/** Claude and Grok packages are maintained in the repository. */
 function packageDirectory(pkg: PluginPackage) {
   return path.join(ROOT, pkg.target, "lifexam-eu");
 }
@@ -524,25 +560,27 @@ async function checkPackageDirectory(pkg: PluginPackage, compareBytes = true) {
   const names: string[] = [];
   async function visit(directory: string) {
     if ((await lstat(directory)).isSymbolicLink())
-      fail(`generated package must not contain symbolic links: ${directory}`);
+      fail(`plugin package must not contain symbolic links: ${directory}`);
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const file = path.join(directory, entry.name);
       if (entry.isDirectory()) await visit(file);
       else if (entry.isFile()) names.push(path.relative(root, file));
-      else fail(`generated package must contain regular files: ${file}`);
+      else fail(`plugin package must contain regular files: ${file}`);
     }
   }
+  if ((await lstat(path.dirname(root))).isSymbolicLink())
+    fail(`plugin package parent must not be a symbolic link: ${root}`);
   await visit(root);
   if (
     (compareBytes && names.length !== pkg.files.size) ||
     names.some((name) => !pkg.files.has(name))
   )
-    fail(`${pkg.target} generated package has an unexpected file inventory`);
+    fail(`${pkg.target} package has an unexpected file inventory`);
   if (!compareBytes) return;
   for (const [name, bytes] of pkg.files) {
     if (!bytes.equals(await readFile(path.join(root, name))))
       fail(
-        `${pkg.target} generated package is stale (${name}); run pnpm plugins:build`,
+        `${pkg.target} package is stale (${name}); update the repository package to match the shared source`,
       );
   }
 }
@@ -551,7 +589,7 @@ async function writePackageDirectory(pkg: PluginPackage) {
   const root = packageDirectory(pkg);
   try {
     if ((await lstat(path.dirname(root))).isSymbolicLink())
-      fail(`generated package parent must not be a symbolic link: ${root}`);
+      fail(`plugin package parent must not be a symbolic link: ${root}`);
     await checkPackageDirectory(pkg, false);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -611,12 +649,19 @@ async function main() {
   validateSkill(skill);
   for (const asset of ASSETS) await validatePng(asset.source, asset.size);
   const packages = await createPackages(manifest, mcp, skill);
+  for (const pkg of packages.filter((pkg) => pkg.target !== "chatgpt")) {
+    await checkPackageDirectory(pkg);
+  }
   const archiveName = (target: string) =>
     `${manifest.name}-${target}-${manifest.version}.zip`;
 
   if (args.check) {
     for (const pkg of packages) {
-      checkArchive(path.join(args.outDir, archiveName(pkg.target)), pkg.files);
+      if (pkg.target === "chatgpt")
+        checkArchive(
+          path.join(args.outDir, archiveName(pkg.target)),
+          pkg.files,
+        );
       await checkPackageDirectory(pkg);
     }
     return;
@@ -624,8 +669,8 @@ async function main() {
 
   const workdir = await mkdtemp(path.join(os.tmpdir(), "lifexam-plugins-"));
   try {
-    // Build and verify both before replacing either published output.
-    for (const pkg of packages) {
+    // Build and verify all packages before replacing any output.
+    for (const pkg of packages.filter((pkg) => pkg.target === "chatgpt")) {
       await buildArchive(
         path.join(workdir, pkg.target),
         path.join(workdir, archiveName(pkg.target)),
@@ -633,7 +678,7 @@ async function main() {
       );
     }
     await mkdir(args.outDir, { recursive: true });
-    for (const pkg of packages) {
+    for (const pkg of packages.filter((pkg) => pkg.target === "chatgpt")) {
       // Copy through a sibling temporary file so replacing an existing ZIP is atomic,
       // including when the output directory is on another filesystem.
       const dest = path.join(args.outDir, archiveName(pkg.target));
@@ -649,7 +694,8 @@ async function main() {
       }
       console.log(`Built ${path.relative(ROOT, dest)}`);
     }
-    for (const pkg of packages) await writePackageDirectory(pkg);
+    for (const pkg of packages.filter((pkg) => pkg.target === "chatgpt"))
+      await writePackageDirectory(pkg);
     if (args.version !== undefined || args.releaseNotes !== undefined) {
       // Persist release changes to the template, not generated listing fields.
       const source = JSON.parse(pluginRaw) as PluginManifest;

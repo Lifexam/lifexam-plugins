@@ -56,3 +56,17 @@ already received by the provider.
 The files in this plugin package are distributed under the MIT license in
 `LICENSE`. This license does not cover the hosted Lifexam application or grant
 access to its service or users' records.
+
+## Grok Build installation
+
+This package also ships as `grok/lifexam-eu/` in the release repository. Grok Build
+loads the Claude-compatible plugin format. From the repository root, run:
+
+```sh
+grok --plugin-dir ./grok/lifexam-eu
+```
+
+Open `/mcps` to inspect the Lifexam connection and complete OAuth sign-in.
+Enable app-sharing consent in Lifexam separately, then list and select a Profile.
+Package checks do not verify live Grok sign-in or record retrieval. This package
+targets Grok Build; installation in Grok Bot has not been verified.
