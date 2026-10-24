@@ -1,4 +1,4 @@
-/** Build the ChatGPT package and validate maintained Claude/Grok packages. */
+/** Build the ChatGPT package and validate the maintained Claude package. */
 import { execFileSync } from "node:child_process";
 import {
   mkdir,
@@ -72,7 +72,7 @@ type PluginManifest = {
 };
 
 type PluginPackage = {
-  target: "chatgpt" | "claude" | "grok";
+  target: "chatgpt" | "claude";
   files: Map<string, Buffer>;
 };
 
@@ -298,7 +298,7 @@ function validatePluginManifest(
 
 type McpManifest = {
   $schema: string;
-  mcpServers: Record<string, { type: "streamable-http"; url: string }>;
+  mcpServers: { "lifexam-eu": { type: "streamable-http"; url: string } };
 };
 
 function validateMcpManifest(
@@ -320,33 +320,22 @@ function validateMcpManifest(
   }
   const servers = manifest.mcpServers;
   if (!isRecord(servers)) fail("mcp.json mcpServers is required");
-  if (!Object.hasOwn(servers, "lifexam-eu")) {
-    fail('mcp.json must include the "lifexam-eu" server');
+  // One server per plugin; each region ships as its own plugin.
+  const names = Object.keys(servers);
+  if (names.length !== 1 || names[0] !== "lifexam-eu") {
+    fail('mcp.json must declare exactly one server named "lifexam-eu"');
   }
-  for (const [name, server] of Object.entries(servers)) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
-      fail(
-        "mcp.json server names must use lowercase kebab-case, at most 64 characters",
-      );
-    }
-    if (!isRecord(server)) fail(`mcp.json ${name} server must be an object`);
-    if (Object.keys(server).some((key) => !["type", "url"].includes(key))) {
-      fail(
-        "mcp.json server supports only type and url; do not embed credentials or unsupported options",
-      );
-    }
-    if (server.type !== "streamable-http") {
-      fail(`mcp.json ${name} type must stay "streamable-http"`);
-    }
-    assertHttpsUrl(server.url, `mcp.json ${name} url`);
-    const url = new URL(server.url);
-    if (url.search || url.hash) {
-      fail(
-        `mcp.json ${name} url must not contain query parameters or fragments; do not embed credentials`,
-      );
-    }
+  const server = servers["lifexam-eu"];
+  if (!isRecord(server)) fail("mcp.json lifexam-eu server must be an object");
+  if (Object.keys(server).some((key) => !["type", "url"].includes(key))) {
+    fail(
+      "mcp.json server supports only type and url; do not embed credentials or unsupported options",
+    );
   }
-  if ((servers["lifexam-eu"] as { url: string }).url !== EXPECTED_MCP_URL) {
+  if (server.type !== "streamable-http") {
+    fail('mcp.json lifexam-eu type must stay "streamable-http"');
+  }
+  if (server.url !== EXPECTED_MCP_URL) {
     fail(`mcp.json lifexam-eu url must stay ${EXPECTED_MCP_URL}`);
   }
 }
@@ -441,7 +430,7 @@ function parseArgs(argv: string[]) {
 function printHelp() {
   console.log(
     [
-      "Build the ChatGPT ZIP/folder and validate Claude/Grok repository packages from plugins/lifexam-eu/.",
+      "Build the ChatGPT ZIP/folder and validate the Claude repository package from plugins/lifexam-eu/.",
       "",
       "  pnpm plugins:build",
       '  pnpm plugins:build --version 1.0.2 --release-notes "What changed"',
@@ -449,7 +438,7 @@ function printHelp() {
       "  pnpm plugins:check",
       "  pnpm plugins:check --tag v1.0.4",
       "",
-      "ZIP output: lifexam-eu-chatgpt-<version>.zip; Claude and Grok use repository folders.",
+      "ZIP output: lifexam-eu-chatgpt-<version>.zip; Claude uses its repository folder.",
       "See plugins/README.md for upload instructions and publication requirements.",
     ].join("\n"),
   );
@@ -475,7 +464,7 @@ async function createPackages(
   const iface = manifest.extensions["com.openai"].interface;
   const claudeManifest = {
     name: manifest.name,
-    displayName: "Lifexam",
+    displayName: iface.displayName,
     version: manifest.version,
     description: manifest.description,
     author: manifest.author,
@@ -486,38 +475,32 @@ async function createPackages(
     privacyPolicyUrl: iface.privacyPolicyURL,
     termsOfServiceUrl: iface.termsOfServiceURL,
   };
-  // Claude and Grok Build share the Claude-compatible plugin layout.
-  const compatibleFiles = new Map([
+  // Grok Build loads this Claude package directly.
+  const claudeFiles = new Map([
     ...common,
     [".claude-plugin/plugin.json", jsonBytes(claudeManifest)],
     [
       ".mcp.json",
       jsonBytes({
-        mcpServers: Object.fromEntries(
-          Object.entries(mcp.mcpServers).map(([name, server]) => [
-            name,
-            { type: "http", url: server.url },
-          ]),
-        ),
+        mcpServers: {
+          [manifest.name]: {
+            type: "http",
+            url: mcp.mcpServers["lifexam-eu"].url,
+          },
+        },
       }),
     ],
   ]);
-  // The OpenAI submission portal connects only one server per plugin.
-  const chatgptMcp = {
-    $schema: mcp.$schema,
-    mcpServers: { [manifest.name]: mcp.mcpServers[manifest.name] },
-  };
   return [
     {
       target: "chatgpt",
       files: new Map([
         ...common,
         ["plugin.json", jsonBytes(manifest)],
-        ["mcp.json", jsonBytes(chatgptMcp)],
+        ["mcp.json", jsonBytes(mcp)],
       ]),
     },
-    { target: "claude", files: new Map(compatibleFiles) },
-    { target: "grok", files: new Map(compatibleFiles) },
+    { target: "claude", files: claudeFiles },
   ];
 }
 
@@ -550,7 +533,7 @@ function checkArchive(zipPath: string, files: Map<string, Buffer>) {
   console.log(`Plugin ZIP is up to date: ${path.relative(ROOT, zipPath)}`);
 }
 
-/** Claude and Grok packages are maintained in the repository. */
+/** The Claude package is maintained in the repository. */
 function packageDirectory(pkg: PluginPackage) {
   return path.join(ROOT, pkg.target, "lifexam-eu");
 }
