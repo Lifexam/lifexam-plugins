@@ -4,10 +4,10 @@ This repository owns the shared plugin source, builder, tests, platform plugin
 folders, and release workflow. It builds independently of the Lifexam application.
 
 - Shared source lives in `plugins/lifexam-eu/`. Maintain `claude/lifexam-eu/`
-  and `grok/lifexam-eu/` as complete committed repository packages, synchronized
-  with the shared source. Their display name is Lifexam; identity stays lifexam-eu.
-- `pnpm plugins:build` validates Claude/Grok without creating or overwriting their
-  folders. It generates only `chatgpt/lifexam-eu/` and the ChatGPT release ZIP.
+  as a complete committed repository package, synchronized with the shared
+  source. Grok Build loads this Claude package directly; do not add a Grok copy.
+- `pnpm plugins:build` validates Claude without creating or overwriting its
+  folder. It generates only `chatgpt/lifexam-eu/` and the ChatGPT release ZIP.
   Do not edit the generated ChatGPT folder independently.
 - Maintain listing copy in all six languages in `translations.json`.
 - Preserve the `lifexam-eu` identity, read-only scope, and MCP endpoint unless the

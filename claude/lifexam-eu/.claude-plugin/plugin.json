@@ -1,6 +1,6 @@
 {
   "name": "lifexam-eu",
-  "displayName": "Lifexam",
+  "displayName": "Lifexam EU",
   "version": "1.0.4",
   "description": "Read-only access to eligible Lifexam EU Profiles and health records, with separate app-sharing consent required. Human Profiles need a known valid age of 16 or older; cats and dogs are eligible. Unknown age or species is blocked. Retrieved data is sent to the connected app provider.",
   "author": {
